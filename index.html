@@ -1755,7 +1755,7 @@ async function addPhoto(id,file){toast('กำลังย่อรูป…');l
   if(S.mode==='cloud'){try{await S.db.collection('photos').doc(uid()).set(doc);toast('เพิ่มรูปแล้ว')}catch(e){toast(e&&e.code==='quota_exceeded'?'พื้นที่เก็บรูปเต็ม ลองลบรูปเก่า':'เพิ่มรูปไม่สำเร็จ')}}
   else{const all=localPhotos();all[uid()]=doc;try{localStorage.setItem(LPH,JSON.stringify(all));loadPhotos(id);toast('เพิ่มรูปแล้ว')}catch(e){toast('พื้นที่ในเครื่องเต็ม')}}}
 /* ---------- bills (รูปบิล/ใบเสร็จ) + tax print ---------- */
-const LBL='durian-bills-v1';let BILL=null;
+const LBL='durian-bills-v1',BCOL='photos';let BILL=null; /* bills live in the photos subcollection (allowed by Firestore rules), marked kind:'bill' */
 const localBills=()=>{try{return JSON.parse(localStorage.getItem(LBL)||'{}')}catch(e){return {}}};
 function billFields(f,g,c,prev){const o={};if(f.querySelector('[name=billNo]'))o.billNo=g('billNo');if(f.querySelector('[name=party]'))o.party=g('party');
   if(BILL&&BILL.c===c&&BILL.ready)o.billN=BILL.saved.length+BILL.pend.length;return o}
@@ -1766,29 +1766,29 @@ function billBox(c,id,x){BILL={c,id:id||null,pend:[],saved:[],ready:!id};setTime
   <div class="photos" id="billph"><p class="muted" style="grid-column:1/-1;margin:0">${id?'กำลังโหลดรูปบิล…':'ยังไม่มีรูปบิล'}</p></div>
   ${S.canWrite?`<label class="btn" style="min-height:40px">${ic('camera')}ถ่าย/เลือกรูปบิล<input type="file" accept="image/*" multiple data-bill hidden></label>`:''}</div>`}
 async function fetchBills(ids){const out=[];if(!ids.length)return out;
-  if(S.mode==='cloud'){for(let i=0;i<ids.length;i+=30){try{const sn=await S.db.collection('bills').where('rid','in',ids.slice(i,i+30)).get();sn.docs.forEach(d=>out.push({id:d.id,...d.data()}))}catch(e){}}}
+  if(S.mode==='cloud'){for(let i=0;i<ids.length;i+=30){try{const sn=await S.db.collection(BCOL).where('rid','in',ids.slice(i,i+30)).get();sn.docs.forEach(d=>out.push({id:d.id,...d.data()}))}catch(e){}}}
   else{const set=new Set(ids);Object.entries(localBills()).forEach(([k,v])=>{if(set.has(v.rid))out.push({id:k,...v})})}
-  return out.filter(b=>typeof b.img==='string'&&b.img.startsWith('data:image/')).sort((a,b)=>(a.updated||0)-(b.updated||0))}
+  return out.filter(b=>b.rid&&typeof b.img==='string'&&b.img.startsWith('data:image/')).sort((a,b)=>(a.updated||0)-(b.updated||0))}
 async function loadBills(){const B=BILL;if(!B||!B.id)return;const r=await fetchBills([B.id]);if(BILL!==B)return;B.saved=r;B.ready=true;showBills()}
 function showBills(){const el=$('#billph');if(!el||!BILL)return;const all=[...BILL.saved.map(b=>({...b,k:'s'})),...BILL.pend.map((img,i)=>({img,id:i,k:'p'}))];
   el.innerHTML=all.length?all.map(b=>`<figure><img src="${esc(b.img)}" alt="รูปบิล" data-act="bigphoto"><figcaption>${b.k==='p'?'รอบันทึก':fd(b.date)}${S.canWrite?` · <button type="button" class="link" data-act="delbill" data-k="${b.k}" data-id="${esc(b.id)}">ลบ</button>`:''}</figcaption></figure>`).join(''):'<p class="muted" style="grid-column:1/-1;margin:0">ยังไม่มีรูปบิล</p>'}
-async function saveBill(c,rid,img){const d={c,rid,img,date:today(),updated:Date.now()};if(S.me)d.by=S.me;const bid=uid();
-  if(S.mode==='cloud'){await S.db.collection('bills').doc(bid).set(d)}else{const all=localBills();all[bid]=d;localStorage.setItem(LBL,JSON.stringify(all))}return {id:bid,...d}}
+async function saveBill(c,rid,img){const d={kind:'bill',c,rid,img,date:today(),updated:Date.now()};if(S.me)d.by=S.me;const bid=uid();
+  if(S.mode==='cloud'){await S.db.collection(BCOL).doc(bid).set(d)}else{const all=localBills();all[bid]=d;localStorage.setItem(LBL,JSON.stringify(all))}return {id:bid,...d}}
 async function setBillN(c,id,n){const x=S.data[c]&&S.data[c][id];if(x&&(+x.billN||0)!==n)await put(c,id,{...x,billN:n})}
 async function addBills(files){const B=BILL;if(!B)return;if(!B.ready){toast('รอโหลดรูปบิลเดิมก่อน');return}toast('กำลังย่อรูปบิล…');
   for(const f of files){let img;try{img=await compress(f,1600,230000)}catch(e){toast('เปิดรูปนี้ไม่ได้');continue}
     if(!B.id){B.pend.push(img);continue}
     try{B.saved.push(await saveBill(B.c,B.id,img))}catch(e){toast(e&&e.code==='quota_exceeded'||e&&e.name==='QuotaExceededError'?'พื้นที่เก็บรูปเต็ม':'เพิ่มรูปบิลไม่สำเร็จ');break}}
   if(BILL===B){showBills();if(B.id){await setBillN(B.c,B.id,B.saved.length);toast('เก็บรูปบิลแล้ว')}else toast('รูปบิลจะบันทึกตอนกดบันทึก')}}
-async function flushBills(c,id){const B=BILL;let n=0;for(const img of B.pend){try{await saveBill(c,id,img);n++}catch(e){toast('บันทึกรูปบิลไม่ครบ');break}}B.pend=[];
+async function flushBills(c,id){const B=BILL;let n=0;for(const img of B.pend){try{await saveBill(c,id,img);n++}catch(e){setTimeout(()=>toast('บันทึกรูปบิลไม่สำเร็จ ลองเปิดรายการแล้วเพิ่มรูปใหม่'),2400);break}}B.pend=[];
   if(n!==0||B.saved.length)setTimeout(()=>setBillN(c,id,B.saved.length+n),400)}
-async function delBillsOf(rid){try{if(S.mode==='cloud'){const sn=await S.db.collection('bills').where('rid','==',rid).get();await Promise.all(sn.docs.map(d=>d.ref.delete()))}
+async function delBillsOf(rid){try{if(S.mode==='cloud'){const sn=await S.db.collection(BCOL).where('rid','==',rid).get();await Promise.all(sn.docs.map(d=>d.ref.delete()))}
   else{const all=localBills();Object.keys(all).forEach(k=>{if(all[k].rid===rid)delete all[k]});localStorage.setItem(LBL,JSON.stringify(all))}}catch(e){}}
 const TXN='durian-taxname-v1';
 async function billAct(a,el){
   if(a==='delbill'){if(!el.classList.contains('arm')){el.classList.add('arm');el.textContent='กดอีกครั้งเพื่อลบ';setTimeout(()=>{if(el.isConnected){el.classList.remove('arm');el.textContent='ลบ'}},4000);return true}
     const B=BILL;if(!B)return true;if(el.dataset.k==='p'){B.pend.splice(+el.dataset.id,1);showBills();return true}
-    const bid=el.dataset.id;try{if(S.mode==='cloud')await S.db.collection('bills').doc(bid).delete();else{const all=localBills();delete all[bid];localStorage.setItem(LBL,JSON.stringify(all))}}catch(e){toast('ลบไม่สำเร็จ');return true}
+    const bid=el.dataset.id;try{if(S.mode==='cloud')await S.db.collection(BCOL).doc(bid).delete();else{const all=localBills();delete all[bid];localStorage.setItem(LBL,JSON.stringify(all))}}catch(e){toast('ลบไม่สำเร็จ');return true}
     B.saved=B.saved.filter(b=>b.id!==bid);showBills();await setBillN(B.c,B.id,B.saved.length);toast('ลบรูปบิลแล้ว');return true}
   if(a==='taxprint'){let nm='';try{nm=localStorage.getItem(TXN)||''}catch(e){}
     openSheet('พิมพ์รายรับ-รายจ่ายส่งสรรพากร',`<p class="muted" style="margin:0 0 12px">รวมทั้งสวน (ทุเรียน+มังคุด) ปี ${be(ui.year)} ทั้งจากหน้าการขาย ฉีดยา/ปุ๋ย สต็อก และรับ-จ่ายเงิน</p>
