@@ -338,6 +338,19 @@ dialog.sheet::backdrop{background:rgba(14,32,24,.45)}
   .cat-bars div{grid-template-columns:84px 1fr 76px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.bill-box{border:1px dashed var(--line,#ccc);border-radius:12px;padding:12px;margin-bottom:14px}
+.bill-box .photos{margin:8px 0}
+.bill-tag{display:inline-block;font-size:12px;padding:1px 7px;border-radius:999px;background:var(--sunk,#eee);margin-left:6px;vertical-align:1px}
+#prt{position:fixed;inset:0;z-index:9999;background:#fff;color:#111;overflow:auto;font-size:14px;line-height:1.5}
+#prt .pbar{position:sticky;top:0;background:#f4f4f2;border-bottom:1px solid #ddd;padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;z-index:2}
+#prt .pg{max-width:780px;margin:0 auto;padding:22px 18px 60px}
+#prt h1{font-size:20px;margin:0 0 4px}#prt h2{font-size:16px;margin:22px 0 6px;border-bottom:2px solid #111;padding-bottom:3px}
+#prt table{width:100%;border-collapse:collapse;font-size:13px}#prt th,#prt td{border:1px solid #999;padding:4px 6px;text-align:left;vertical-align:top}
+#prt th{background:#eee}#prt td.n,#prt th.n{text-align:right;white-space:nowrap}#prt tr.sum td{font-weight:700;background:#f6f6f6}
+#prt .pnote{font-size:12px;color:#444;margin:6px 0}#prt .billfig{page-break-inside:avoid;break-inside:avoid;margin:0 0 14px;border:1px solid #bbb;padding:8px}
+#prt .billfig img{display:block;max-width:100%;max-height:125mm;margin:0 auto}#prt .billfig figcaption{font-size:12.5px;margin-top:4px}
+#prt .sign{margin-top:40px;display:flex;justify-content:flex-end}#prt .sign div{text-align:center;min-width:240px}
+@media print{body>*:not(#prt){display:none!important}#prt{position:static;overflow:visible}#prt .pbar{display:none}#prt .pg{padding:0;max-width:none}@page{size:A4;margin:14mm}}
 </style>
 </head>
 <body>
@@ -485,9 +498,11 @@ async function put(c,id,obj){
 }
 async function del(c,id){
   if(!S.canWrite)return false;
+  if(BILLC.includes(c))delBillsOf(id);
   if(S.mode==='cloud'){try{const pr=S.db.collection(c).doc(id).delete();await Promise.race([pr,new Promise(r=>setTimeout(r,1500))]);return true}catch(e){toast('ลบไม่สำเร็จ');return false}}
   delete S.data[c][id];saveLocal();render();return true;
 }
+const BILLC=['money','sales','stock','works'];
 const SKEY='durian-session-v1';let FS=null,UNSUBS=[];
 const loadSession=()=>{try{return JSON.parse(localStorage.getItem(SKEY)||'null')}catch(e){return null}};
 const saveSession=x=>{try{x?localStorage.setItem(SKEY,JSON.stringify(x)):localStorage.removeItem(SKEY)}catch(e){}};
@@ -582,11 +597,11 @@ function treeState(){
 }
 function ledger(){
   const rows=[];
-  list('money').forEach(m=>{const c=m.crop||'ทั้งสวน';rows.push({src:'money',id:m.id,date:m.date,dir:m.dir,cat:m.cat,amount:+m.amount||0,title:(m.note||m.cat)+(c!=='ทั้งสวน'?' · '+c:''),by:m.by,demo:m.demo,crop:c,mg:cropMg(c)})});
-  list('works').forEach(w=>{const co=cropOfIds(w.trees);if(+w.cost>0)rows.push({src:'works',...co,id:w.id,date:w.date,dir:'out',cat:/ปุ๋ย/.test(w.type)?'ปุ๋ย':/ยา|สาร/.test(w.type)?'ยา/สารเคมี':'อื่นๆ',amount:+w.cost,title:w.type+(w.product?' · '+w.product:''),by:w.by})});
-  list('sales').forEach(s=>{const g=saleGross(s),c=s.crop||'ทุเรียน',mg=cropMg(c),fr=c==='มังคุด'?'มังคุด':'ทุเรียน';rows.push({src:'sales',crop:c,mg,id:s.id,date:s.date,dir:'in',cat:'ขาย'+fr,amount:g,title:'ขาย'+fr+(s.mode==='online'?' ออนไลน์':' รอบตัด')+(s.buyer?' · '+s.buyer:''),by:s.by});
-    if(+s.fee>0)rows.push({src:'sales',crop:c,mg,id:s.id,date:s.date,dir:'out',cat:s.mode==='online'?'ค่าส่ง':'อื่นๆ',amount:+s.fee,title:(s.mode==='online'?'ค่าส่ง/แพ็ก':'ค่าใช้จ่ายการขาย')+(s.buyer?' · '+s.buyer:''),by:s.by})});
-  list('stock').forEach(k=>{if(+k.cost>0)rows.push({src:'stock',crop:'ทั้งสวน',mg:null,id:k.id,date:k.date,dir:'out',cat:k.kind||'อื่นๆ',amount:+k.cost,title:'ซื้อ '+k.item+' '+nf.format(+k.qty||0)+' '+(k.unit||''),by:k.by})});
+  list('money').forEach(m=>{const c=m.crop||'ทั้งสวน';rows.push({src:'money',id:m.id,date:m.date,dir:m.dir,cat:m.cat,amount:+m.amount||0,title:(m.note||m.cat)+(c!=='ทั้งสวน'?' · '+c:''),by:m.by,demo:m.demo,crop:c,mg:cropMg(c),bill:+m.billN||0,billNo:m.billNo||'',party:m.party||''})});
+  list('works').forEach(w=>{const co=cropOfIds(w.trees);if(+w.cost>0)rows.push({src:'works',...co,id:w.id,date:w.date,dir:'out',cat:/ปุ๋ย/.test(w.type)?'ปุ๋ย':/ยา|สาร/.test(w.type)?'ยา/สารเคมี':'อื่นๆ',amount:+w.cost,title:w.type+(w.product?' · '+w.product:''),by:w.by,bill:+w.billN||0,billNo:w.billNo||'',party:w.party||''})});
+  list('sales').forEach(s=>{const g=saleGross(s),c=s.crop||'ทุเรียน',mg=cropMg(c),fr=c==='มังคุด'?'มังคุด':'ทุเรียน';rows.push({src:'sales',crop:c,mg,id:s.id,date:s.date,dir:'in',cat:'ขาย'+fr,amount:g,title:'ขาย'+fr+(s.mode==='online'?' ออนไลน์':' รอบตัด')+(s.buyer?' · '+s.buyer:''),by:s.by,bill:+s.billN||0,billNo:s.billNo||'',party:s.buyer||''});
+    if(+s.fee>0)rows.push({src:'sales',crop:c,mg,id:s.id,date:s.date,dir:'out',cat:s.mode==='online'?'ค่าส่ง':'อื่นๆ',amount:+s.fee,title:(s.mode==='online'?'ค่าส่ง/แพ็ก':'ค่าใช้จ่ายการขาย')+(s.buyer?' · '+s.buyer:''),by:s.by,bill:0,billNo:'',party:''})});
+  list('stock').forEach(k=>{if(+k.cost>0)rows.push({src:'stock',crop:'ทั้งสวน',mg:null,id:k.id,date:k.date,dir:'out',cat:k.kind||'อื่นๆ',amount:+k.cost,title:'ซื้อ '+k.item+' '+nf.format(+k.qty||0)+' '+(k.unit||''),by:k.by,bill:+k.billN||0,billNo:k.billNo||'',party:k.party||k.note||''})});
   return rows.sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:0);
 }
 const saleKg=s=>(s.lines||[]).reduce((a,l)=>a+(+l.kg||0),0);
@@ -1596,9 +1611,9 @@ function vLedger(){
   if(ce.length)h+=`<section class="sec" style="margin-top:20px"><div class="sec-h"><h2>รายจ่ายแยกหมวด</h2></div><div class="panel cat-bars">${ce.map(([c,v])=>`<div><span>${esc(c)}</span><i style="width:${Math.max(2,v/mx*100)}%"></i><em>${baht(v)}</em></div>`).join('')}</div></section>`;
   // monthly
   const months={};L.forEach(r=>{const k=r.date.slice(0,7);(months[k]=months[k]||[]).push(r)});
-  h+=`<section class="sec"><div class="sec-h"><h2>รายการทั้งหมด</h2><button class="link" data-act="csv">${''}คัดลอกไป Excel</button></div>`;
+  h+=`<section class="sec"><div class="sec-h"><h2>รายการทั้งหมด</h2><span class="row" style="gap:14px"><button class="link" data-act="taxprint">พิมพ์ส่งสรรพากร</button><button class="link" data-act="csv">${''}คัดลอกไป Excel</button></span></div>`;
   h+=Object.entries(months).sort((a,b)=>a[0]<b[0]?1:-1).map(([k,rs])=>{const i=rs.filter(r=>r.dir==='in').reduce((a,r)=>a+r.amount,0),o=rs.filter(r=>r.dir==='out').reduce((a,r)=>a+r.amount,0);
-    return `<div class="sec-h" style="margin-top:18px"><h3 style="margin:0;font-size:16px">${pd(k+'-01').toLocaleDateString('th-TH',{month:'long',year:'numeric'})}</h3><span class="muted" style="font-size:14px">รับ <b style="color:var(--in)">${baht(i)}</b> · จ่าย <b style="color:var(--out)">${baht(o)}</b></span></div><div class="panel"><ul class="list">${rs.map(r=>`<li class="click" data-act="edit" data-c="${r.src}" data-id="${r.id}"><div class="d">${fd(r.date,{day:'numeric',month:'short'})}</div><div><div class="t">${esc(r.title)}</div><div class="s"><span class="kind">${esc(r.cat)}</span>${r.src!=='money'?'มาจากหน้า '+({works:'ฉีดยา/ปุ๋ย',sales:'การขาย',stock:'สต็อก'})[r.src]:''} ${who(r.by)}</div></div><div class="amt ${r.dir}">${r.dir==='in'?'+':'−'}${baht(r.amount)}</div></li>`).join('')}</ul></div>`}).join('');
+    return `<div class="sec-h" style="margin-top:18px"><h3 style="margin:0;font-size:16px">${pd(k+'-01').toLocaleDateString('th-TH',{month:'long',year:'numeric'})}</h3><span class="muted" style="font-size:14px">รับ <b style="color:var(--in)">${baht(i)}</b> · จ่าย <b style="color:var(--out)">${baht(o)}</b></span></div><div class="panel"><ul class="list">${rs.map(r=>`<li class="click" data-act="edit" data-c="${r.src}" data-id="${r.id}"><div class="d">${fd(r.date,{day:'numeric',month:'short'})}</div><div><div class="t">${esc(r.title)}${r.bill?`<span class="bill-tag">มีบิล${r.bill>1?' '+r.bill:''}</span>`:''}</div><div class="s"><span class="kind">${esc(r.cat)}</span>${r.src!=='money'?'มาจากหน้า '+({works:'ฉีดยา/ปุ๋ย',sales:'การขาย',stock:'สต็อก'})[r.src]:''} ${who(r.by)}</div></div><div class="amt ${r.dir}">${r.dir==='in'?'+':'−'}${baht(r.amount)}</div></li>`).join('')}</ul></div>`}).join('');
   return h+`</section>`;
 }
 
@@ -1637,7 +1652,7 @@ const forms={
   <div class="fld"><label class="l" for="w6">หมายเหตุ</label><input class="f" id="w6" name="note" value="${esc(x.note)}" placeholder="เช่น ฝนตกหลังฉีด, เจอหนอนเจาะ"></div></div>
   <div class="grid2"><div class="fld"><label class="l" for="w7">เว้นก่อนตัด (วัน) <small>ดูบนฉลากยา</small></label><input class="f num" style="font-size:20px" id="w7" name="phi" type="number" inputmode="numeric" min="0" value="${x.phi||''}" placeholder="เช่น 14"></div>
   <div class="fld"><label class="l" for="w8">ทำซ้ำทุกกี่วัน <small>จะเตือนรอบถัดไป</small></label><input class="f num" style="font-size:20px" id="w8" name="every" type="number" inputmode="numeric" min="0" value="${x.every||''}" placeholder="ไม่ทำซ้ำ เว้นว่าง"></div></div>
-  <div class="fld"><label class="l" for="w9">ใช้ไปเท่าไหร่ <small id="useunit">${unitOf(x.product)?'หน่วย: '+esc(unitOf(x.product))+' · หักจากสต็อก':'หักจากสต็อก ถ้าชื่อตรงกับของในสต็อก'}</small></label><input class="f num" style="font-size:20px" id="w9" name="useQty" type="number" inputmode="decimal" min="0" step="any" value="${x.useQty||''}"></div>`,delBtn('works',id)+saveBtn)},
+  <div class="fld"><label class="l" for="w9">ใช้ไปเท่าไหร่ <small id="useunit">${unitOf(x.product)?'หน่วย: '+esc(unitOf(x.product))+' · หักจากสต็อก':'หักจากสต็อก ถ้าชื่อตรงกับของในสต็อก'}</small></label><input class="f num" style="font-size:20px" id="w9" name="useQty" type="number" inputmode="decimal" min="0" step="any" value="${x.useQty||''}"></div>${billBox('works',id,x)}`,delBtn('works',id)+saveBtn)},
  flowers(id,x={}){
   const stage=x.stage||'induce';
   openSheet(id?'แก้ไขระยะดอก':'จดระยะดอก / ติดผล',`<input type="hidden" name="_c" value="flowers"><input type="hidden" name="_id" value="${id||''}">
@@ -1659,7 +1674,7 @@ const forms={
   <div class="fld"><label class="l">${mode==='round'?'น้ำหนักแต่ละเกรด':'สินค้า'}</label><table class="lines"><thead><tr><th>${mode==='round'?'เกรด':'รายการ'}</th><th>กิโลกรัม</th><th>บาท/กก.</th></tr></thead><tbody id="ln">${lines.map(l=>lineRow(l)).join('')}</tbody></table><button type="button" class="link" data-act="addline" style="margin-top:6px">+ เพิ่มแถว</button></div>
   <div class="grid2"><div class="fld"><label class="l" for="s4">${mode==='online'?'ค่าส่ง/ค่ากล่อง (บาท)':'ค่าใช้จ่ายการขาย (บาท)'} <small>ลงเป็นรายจ่าย</small></label><input class="f num" style="font-size:20px" id="s4" name="fee" type="number" inputmode="decimal" min="0" step="any" value="${x.fee??''}" placeholder="0"></div>
   <div class="fld"><label class="l" for="s5">หมายเหตุ</label><input class="f" id="s5" name="note" value="${esc(x.note)}" placeholder="${mode==='round'?'เช่น ตัดมีด 2, เปอร์เซ็นต์แป้ง':'เช่น ส่ง Kerry, โอนแล้ว'}"></div></div>
-  <div class="total"><span>รวมเป็นเงิน</span><b id="stotal">0</b></div>`,delBtn('sales',id)+saveBtn);calcSale()},
+  <div class="total"><span>รวมเป็นเงิน</span><b id="stotal">0</b></div>${billBox('sales',id,x)}`,delBtn('sales',id)+saveBtn);calcSale()},
  money(id,x={}){
   const dir=x.dir||'out';
   openSheet(id?'แก้ไขรายการเงิน':dir==='in'?'รับเงิน':'จ่ายเงิน',`<input type="hidden" name="_c" value="money"><input type="hidden" name="_id" value="${id||''}"><input type="hidden" name="dir" value="${dir}">
@@ -1667,7 +1682,7 @@ const forms={
   <div class="grid2"><div class="fld"><label class="l" for="m2">หมวด</label><select class="f" id="m2" name="cat">${opt(dir==='in'?IN_CATS:OUT_CATS,x.cat)}</select></div>
   <div class="fld"><label class="l" for="m3">วันที่</label><input class="f" id="m3" type="date" name="date" value="${x.date||today()}"></div></div>
   <div class="fld"><label class="l" for="m4">รายละเอียด</label><input class="f" id="m4" name="note" value="${esc(x.note)}" placeholder="${dir==='in'?'เช่น ขายกิ่งพันธุ์':'เช่น ค่าแรงตัดหญ้า 2 คน'}"></div>
-  ${hasMg()?`<div class="fld"><label class="l" for="m5">เป็นของ <small>ทั้งสวน = แบ่งตามสัดส่วนในหน้าต้นทุน</small></label><select class="f" id="m5" name="crop">${opt(CROPS,x.crop||(x.cat==='ขายมังคุด'?'มังคุด':'ทั้งสวน'))}</select></div>`:''}`,delBtn('money',id)+saveBtn)},
+  ${hasMg()?`<div class="fld"><label class="l" for="m5">เป็นของ <small>ทั้งสวน = แบ่งตามสัดส่วนในหน้าต้นทุน</small></label><select class="f" id="m5" name="crop">${opt(CROPS,x.crop||(x.cat==='ขายมังคุด'?'มังคุด':'ทั้งสวน'))}</select></div>`:''}${billBox('money',id,x)}`,delBtn('money',id)+saveBtn)},
  chems(id,x={}){const others=chemList().filter(c=>c.id!==id);const tg=new Set(x.tags||[]),nm=new Set(x.notMix||[]);
   openSheet(id?'แก้ไขสาร':'เพิ่มสารเข้าคลัง',`<input type="hidden" name="_c" value="chems"><input type="hidden" name="_id" value="${id||''}">
   <div class="fld"><label class="l" for="c1">ชื่อสาร/ชื่อการค้า</label><input class="f" id="c1" name="name" value="${esc(x.name)}" placeholder="เช่น แมนโคเซบ 80% WP" required></div>
@@ -1684,7 +1699,7 @@ const forms={
   <div class="fld"><label class="l" for="k1">ชื่อของ</label><input class="f" id="k1" name="item" list="stocklist" value="${esc(x.item)}" placeholder="เช่น 15-15-15, แมนโคเซบ" required><datalist id="stocklist">${stockLevels().map(o=>`<option value="${esc(o.item)}">`).join('')}</datalist></div>
   <div class="grid2"><div class="fld"><label class="l" for="k2">จำนวน</label><input class="f num" style="font-size:22px" id="k2" name="qty" type="number" inputmode="decimal" min="0" step="any" value="${x.qty??''}" required></div><div class="fld"><label class="l" for="k3">หน่วย</label><select class="f" id="k3" name="unit">${opt(UNITS,x.unit)}</select></div></div>
   <div class="grid2"><div class="fld"><label class="l" for="k4">ประเภท</label><select class="f" id="k4" name="kind">${opt(STOCK_KINDS,x.kind)}</select></div><div class="fld"><label class="l" for="k5">ราคารวม (บาท) <small>ลงบัญชีให้เอง</small></label><input class="f num" style="font-size:22px" id="k5" name="cost" type="number" inputmode="decimal" min="0" step="any" value="${x.cost??''}"></div></div>
-  <div class="grid2"><div class="fld"><label class="l" for="k6">วันที่ซื้อ</label><input class="f" id="k6" type="date" name="date" value="${x.date||today()}"></div><div class="fld"><label class="l" for="k7">ร้าน/หมายเหตุ</label><input class="f" id="k7" name="note" value="${esc(x.note)}"></div></div>`,delBtn('stock',id)+saveBtn)},
+  <div class="grid2"><div class="fld"><label class="l" for="k6">วันที่ซื้อ</label><input class="f" id="k6" type="date" name="date" value="${x.date||today()}"></div><div class="fld"><label class="l" for="k7">ร้าน/หมายเหตุ</label><input class="f" id="k7" name="note" value="${esc(x.note)}"></div></div>${billBox('stock',id,x)}`,delBtn('stock',id)+saveBtn)},
  trees(id,x={}){
   if(id){openSheet('แก้ไขต้น '+esc(x.no),`<input type="hidden" name="_c" value="trees"><input type="hidden" name="_id" value="${id}">
    <div class="grid2"><div class="fld"><label class="l" for="t1">เบอร์ต้น</label><input class="f num" style="font-size:22px" id="t1" name="no" value="${esc(x.no)}" required></div><div class="fld"><label class="l" for="t2">แถว/โซน</label><input class="f" id="t2" name="row" value="${esc(x.row)}"></div></div>
@@ -1739,6 +1754,86 @@ async function addPhoto(id,file){toast('กำลังย่อรูป…');l
   const doc={tree:id,date:today(),img,updated:Date.now()};if(S.me)doc.by=S.me;
   if(S.mode==='cloud'){try{await S.db.collection('photos').doc(uid()).set(doc);toast('เพิ่มรูปแล้ว')}catch(e){toast(e&&e.code==='quota_exceeded'?'พื้นที่เก็บรูปเต็ม ลองลบรูปเก่า':'เพิ่มรูปไม่สำเร็จ')}}
   else{const all=localPhotos();all[uid()]=doc;try{localStorage.setItem(LPH,JSON.stringify(all));loadPhotos(id);toast('เพิ่มรูปแล้ว')}catch(e){toast('พื้นที่ในเครื่องเต็ม')}}}
+/* ---------- bills (รูปบิล/ใบเสร็จ) + tax print ---------- */
+const LBL='durian-bills-v1';let BILL=null;
+const localBills=()=>{try{return JSON.parse(localStorage.getItem(LBL)||'{}')}catch(e){return {}}};
+function billFields(f,g,c,prev){const o={};if(f.querySelector('[name=billNo]'))o.billNo=g('billNo');if(f.querySelector('[name=party]'))o.party=g('party');
+  if(BILL&&BILL.c===c&&BILL.ready)o.billN=BILL.saved.length+BILL.pend.length;return o}
+function billBox(c,id,x){BILL={c,id:id||null,pend:[],saved:[],ready:!id};setTimeout(()=>{if(id)loadBills();else showBills()},0);
+  const partyF=c==='sales'?'':`<div class="fld" style="margin:0"><label class="l" for="bp">${c==='money'&&x.dir==='in'?'รับเงินจาก':'ร้าน / จ่ายให้ใคร'}</label><input class="f" id="bp" name="party" value="${esc(x.party||'')}" placeholder="${c==='money'&&x.dir==='in'?'ชื่อผู้จ่าย':'เช่น ร้านเกษตรรุ่งเรือง'}"></div>`;
+  return `<div class="bill-box"><label class="l" style="margin:0 0 6px">บิล / ใบเสร็จ <small>ถ่ายรูปเก็บไว้ ใช้ยื่นสรรพากรได้</small></label>
+  <div class="grid2">${partyF}<div class="fld" style="margin:0"><label class="l" for="bn">เลขที่บิล</label><input class="f" id="bn" name="billNo" value="${esc(x.billNo||'')}" placeholder="ถ้ามี"></div></div>
+  <div class="photos" id="billph"><p class="muted" style="grid-column:1/-1;margin:0">${id?'กำลังโหลดรูปบิล…':'ยังไม่มีรูปบิล'}</p></div>
+  ${S.canWrite?`<label class="btn" style="min-height:40px">${ic('camera')}ถ่าย/เลือกรูปบิล<input type="file" accept="image/*" multiple data-bill hidden></label>`:''}</div>`}
+async function fetchBills(ids){const out=[];if(!ids.length)return out;
+  if(S.mode==='cloud'){for(let i=0;i<ids.length;i+=30){try{const sn=await S.db.collection('bills').where('rid','in',ids.slice(i,i+30)).get();sn.docs.forEach(d=>out.push({id:d.id,...d.data()}))}catch(e){}}}
+  else{const set=new Set(ids);Object.entries(localBills()).forEach(([k,v])=>{if(set.has(v.rid))out.push({id:k,...v})})}
+  return out.filter(b=>typeof b.img==='string'&&b.img.startsWith('data:image/')).sort((a,b)=>(a.updated||0)-(b.updated||0))}
+async function loadBills(){const B=BILL;if(!B||!B.id)return;const r=await fetchBills([B.id]);if(BILL!==B)return;B.saved=r;B.ready=true;showBills()}
+function showBills(){const el=$('#billph');if(!el||!BILL)return;const all=[...BILL.saved.map(b=>({...b,k:'s'})),...BILL.pend.map((img,i)=>({img,id:i,k:'p'}))];
+  el.innerHTML=all.length?all.map(b=>`<figure><img src="${esc(b.img)}" alt="รูปบิล" data-act="bigphoto"><figcaption>${b.k==='p'?'รอบันทึก':fd(b.date)}${S.canWrite?` · <button type="button" class="link" data-act="delbill" data-k="${b.k}" data-id="${esc(b.id)}">ลบ</button>`:''}</figcaption></figure>`).join(''):'<p class="muted" style="grid-column:1/-1;margin:0">ยังไม่มีรูปบิล</p>'}
+async function saveBill(c,rid,img){const d={c,rid,img,date:today(),updated:Date.now()};if(S.me)d.by=S.me;const bid=uid();
+  if(S.mode==='cloud'){await S.db.collection('bills').doc(bid).set(d)}else{const all=localBills();all[bid]=d;localStorage.setItem(LBL,JSON.stringify(all))}return {id:bid,...d}}
+async function setBillN(c,id,n){const x=S.data[c]&&S.data[c][id];if(x&&(+x.billN||0)!==n)await put(c,id,{...x,billN:n})}
+async function addBills(files){const B=BILL;if(!B)return;if(!B.ready){toast('รอโหลดรูปบิลเดิมก่อน');return}toast('กำลังย่อรูปบิล…');
+  for(const f of files){let img;try{img=await compress(f,1600,230000)}catch(e){toast('เปิดรูปนี้ไม่ได้');continue}
+    if(!B.id){B.pend.push(img);continue}
+    try{B.saved.push(await saveBill(B.c,B.id,img))}catch(e){toast(e&&e.code==='quota_exceeded'||e&&e.name==='QuotaExceededError'?'พื้นที่เก็บรูปเต็ม':'เพิ่มรูปบิลไม่สำเร็จ');break}}
+  if(BILL===B){showBills();if(B.id){await setBillN(B.c,B.id,B.saved.length);toast('เก็บรูปบิลแล้ว')}else toast('รูปบิลจะบันทึกตอนกดบันทึก')}}
+async function flushBills(c,id){const B=BILL;let n=0;for(const img of B.pend){try{await saveBill(c,id,img);n++}catch(e){toast('บันทึกรูปบิลไม่ครบ');break}}B.pend=[];
+  if(n!==0||B.saved.length)setTimeout(()=>setBillN(c,id,B.saved.length+n),400)}
+async function delBillsOf(rid){try{if(S.mode==='cloud'){const sn=await S.db.collection('bills').where('rid','==',rid).get();await Promise.all(sn.docs.map(d=>d.ref.delete()))}
+  else{const all=localBills();Object.keys(all).forEach(k=>{if(all[k].rid===rid)delete all[k]});localStorage.setItem(LBL,JSON.stringify(all))}}catch(e){}}
+const TXN='durian-taxname-v1';
+async function billAct(a,el){
+  if(a==='delbill'){if(!el.classList.contains('arm')){el.classList.add('arm');el.textContent='กดอีกครั้งเพื่อลบ';setTimeout(()=>{if(el.isConnected){el.classList.remove('arm');el.textContent='ลบ'}},4000);return true}
+    const B=BILL;if(!B)return true;if(el.dataset.k==='p'){B.pend.splice(+el.dataset.id,1);showBills();return true}
+    const bid=el.dataset.id;try{if(S.mode==='cloud')await S.db.collection('bills').doc(bid).delete();else{const all=localBills();delete all[bid];localStorage.setItem(LBL,JSON.stringify(all))}}catch(e){toast('ลบไม่สำเร็จ');return true}
+    B.saved=B.saved.filter(b=>b.id!==bid);showBills();await setBillN(B.c,B.id,B.saved.length);toast('ลบรูปบิลแล้ว');return true}
+  if(a==='taxprint'){let nm='';try{nm=localStorage.getItem(TXN)||''}catch(e){}
+    openSheet('พิมพ์รายรับ-รายจ่ายส่งสรรพากร',`<p class="muted" style="margin:0 0 12px">รวมทั้งสวน (ทุเรียน+มังคุด) ปี ${be(ui.year)} ทั้งจากหน้าการขาย ฉีดยา/ปุ๋ย สต็อก และรับ-จ่ายเงิน</p>
+    <div class="fld"><label class="l">ช่วงเวลา</label><div class="seg" id="txr"><button type="button" data-act="txr" data-v="y" aria-pressed="true">ทั้งปี (ภ.ง.ด.90)</button><button type="button" data-act="txr" data-v="h" aria-pressed="false">ม.ค.–มิ.ย. (ภ.ง.ด.94 ครึ่งปี)</button></div></div>
+    <div class="fld"><label class="l" for="txn">ชื่อผู้มีเงินได้ <small>เก็บไว้ในเครื่องนี้เท่านั้น</small></label><input class="f" id="txn" value="${esc(nm)}" placeholder="เช่น นายมน ..."></div>
+    <label class="row" style="gap:8px;margin-bottom:6px"><input type="checkbox" id="txb" checked> แนบรูปบิลต่อท้าย</label>`,'<span></span><button type="button" class="btn pri" data-act="taxgo">เปิดหน้าพิมพ์</button>');return true}
+  if(a==='txr'){$('#txr').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b===el?'true':'false'));return true}
+  if(a==='taxgo'){const half=$('#txr [aria-pressed=true]').dataset.v==='h',nm=$('#txn').value.trim(),wb=$('#txb').checked;try{localStorage.setItem(TXN,nm)}catch(e){}closeSheet();taxReport(ui.year,half,nm,wb);return true}
+  if(a==='prtclose'){const p=$('#prt');if(p)p.remove();return true}
+  if(a==='prtprint'){window.print();return true}
+  return false}
+async function taxReport(y,half,name,withBills){
+  const L=ledger().filter(r=>yearOf(r.date)===y&&!r.demo&&(!half||r.date.slice(5,7)<='06')).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+  const I=L.filter(r=>r.dir==='in'),O=L.filter(r=>r.dir==='out'),sum=a=>a.reduce((s,r)=>s+r.amount,0);
+  const inc=sum(I),cap=sum(O.filter(r=>CAPITAL.includes(r.cat))),op=sum(O.filter(r=>!CAPITAL.includes(r.cat)));
+  let bills=[];const num={};
+  if(withBills){const ids=[...new Set(L.filter(r=>r.bill>0).map(r=>r.id))];bills=await fetchBills(ids)}
+  let k=0;const byRid={};bills.forEach(b=>(byRid[b.rid]=byRid[b.rid]||[]).push(b));
+  const order=[...I,...O];const seen=new Set();const figs=[];
+  order.forEach(r=>{if(seen.has(r.id)||!byRid[r.id])return;seen.add(r.id);num[r.id]=byRid[r.id].map(b=>{k++;figs.push({n:k,b,r});return k})});
+  const ref=r=>num[r.id]?'ภาพ '+num[r.id].join(', '):r.bill?'มี (ไม่ได้แนบ)':'–';
+  const per=half?`1 ม.ค. – 30 มิ.ย. ${be(y)}`:`1 ม.ค. – 31 ธ.ค. ${be(y)}`;
+  const row=(r,i,inc_)=>`<tr><td class="n">${i+1}</td><td>${fd(r.date,{day:'numeric',month:'short',year:'2-digit'})}</td>${inc_?'':`<td>${esc(r.cat)}</td>`}<td>${esc(r.title)}</td><td>${esc(r.party||'')}</td><td>${esc(r.billNo||'')}</td><td>${ref(r)}</td><td class="n">${baht(r.amount)}</td></tr>`;
+  const cats={};O.forEach(r=>cats[r.cat]=(cats[r.cat]||0)+r.amount);
+  const flat=inc*0.6,netFlat=inc-flat,netReal=inc-op,better=netReal<netFlat?'หักตามจริง':'หักเหมา 60%';
+  let h=`<div class="pbar"><button class="btn pri" data-act="prtprint">พิมพ์ / บันทึกเป็น PDF</button><button class="btn" data-act="prtclose">ปิด</button><span class="muted" style="font-size:13px">ในมือถือ เลือก "บันทึกเป็น PDF" แล้วค่อยส่งปริ้นได้</span></div><div class="pg">
+  <h1>รายงานรายรับ-รายจ่าย ${esc(settings().name)}</h1>
+  <div>ผู้มีเงินได้: <b>${esc(name)||'..............................................'}</b></div>
+  <div>ประเภทเงินได้: มาตรา 40(8) ขายผลผลิตการเกษตร (ทุเรียน/มังคุด) · ปีภาษี ${be(y)} · ช่วง ${per}</div>
+  <div class="pnote">พิมพ์วันที่ ${fd(today(),{day:'numeric',month:'long',year:'numeric'})} จากแอปสมุดสวนทุเรียน</div>
+  <h2>สรุป</h2><table><tbody>
+  <tr><td>รายรับรวม (${I.length} รายการ)</td><td class="n">${baht(inc)}</td></tr>
+  <tr><td>รายจ่ายดำเนินงานจริง (${O.filter(r=>!CAPITAL.includes(r.cat)).length} รายการ)</td><td class="n">${baht(op)}</td></tr>
+  <tr><td>รายจ่ายลงทุน: ${CAPITAL.join(' ')} (${O.filter(r=>CAPITAL.includes(r.cat)).length} รายการ) <small>แยกไว้ ปกติคิดเป็นค่าเสื่อมทีละปี ไม่หักเต็มในปีเดียว</small></td><td class="n">${baht(cap)}</td></tr>
+  <tr class="sum"><td>เงินได้หลังหักค่าใช้จ่าย ถ้าหักตามจริง</td><td class="n">${netReal<0?'−':''}${baht(Math.abs(netReal))}</td></tr>
+  <tr class="sum"><td>เงินได้หลังหักค่าใช้จ่าย ถ้าหักเหมา 60% (หัก ${baht(flat)})</td><td class="n">${baht(netFlat)}</td></tr>
+  </tbody></table>
+  <p class="pnote">แบบที่เหลือเงินได้น้อยกว่าในช่วงนี้คือ <b>${better}</b> · หักตามจริงต้องมีบิล/หลักฐานครบ ตัวเลขนี้เป็นตัวช่วยเตรียมเอกสาร ยังไม่ได้หักค่าลดหย่อน ควรเช็กกับสรรพากรก่อนยื่น</p>
+  <h2>รายรับ</h2>${I.length?`<table><thead><tr><th class="n">ที่</th><th>วันที่</th><th>รายการ</th><th>ผู้ซื้อ/ผู้จ่าย</th><th>เลขที่บิล</th><th>หลักฐาน</th><th class="n">บาท</th></tr></thead><tbody>${I.map((r,i)=>row(r,i,1)).join('')}<tr class="sum"><td colspan="6">รวมรายรับ</td><td class="n">${baht(inc)}</td></tr></tbody></table>`:'<p>ไม่มีรายรับในช่วงนี้</p>'}
+  <h2>รายจ่ายแยกหมวด</h2>${O.length?`<table><tbody>${Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${esc(c)}${CAPITAL.includes(c)?' <small>(ลงทุน)</small>':''}</td><td class="n">${baht(v)}</td></tr>`).join('')}<tr class="sum"><td>รวมรายจ่ายทั้งหมด</td><td class="n">${baht(op+cap)}</td></tr></tbody></table>`:'<p>ไม่มีรายจ่ายในช่วงนี้</p>'}
+  ${O.length?`<h2>รายการรายจ่าย</h2><table><thead><tr><th class="n">ที่</th><th>วันที่</th><th>หมวด</th><th>รายการ</th><th>ร้าน/จ่ายให้</th><th>เลขที่บิล</th><th>หลักฐาน</th><th class="n">บาท</th></tr></thead><tbody>${O.map((r,i)=>row(r,i,0)).join('')}<tr class="sum"><td colspan="7">รวมรายจ่าย</td><td class="n">${baht(op+cap)}</td></tr></tbody></table>`:''}
+  <div class="sign"><div>ลงชื่อ ..........................................<br>(${esc(name)||'..........................................'})<br>ผู้จัดทำ วันที่ ........../........../..........</div></div>
+  ${figs.length?`<h2 style="page-break-before:always;break-before:page">ภาพบิล / ใบเสร็จ (${figs.length} ภาพ)</h2>${figs.map(f=>`<figure class="billfig"><img src="${esc(f.b.img)}" alt="บิลภาพที่ ${f.n}"><figcaption><b>ภาพ ${f.n}</b> · ${fd(f.r.date,{day:'numeric',month:'short',year:'numeric'})} · ${f.r.dir==='in'?'รายรับ':'รายจ่าย'} · ${esc(f.r.title)}${f.r.billNo?' · เลขที่ '+esc(f.r.billNo):''} · ${baht(f.r.amount)} บาท</figcaption></figure>`).join('')}`:withBills?'<p class="pnote">ยังไม่มีรูปบิลในช่วงนี้ เพิ่มได้โดยกดรายการแล้วถ่ายรูปบิล</p>':''}
+  </div>`;
+  let p=$('#prt');if(!p){p=document.createElement('div');p.id='prt';document.body.appendChild(p)}p.innerHTML=h;p.scrollTop=0}
 function setupSheet(){
   const s=settings();
   openSheet('ตั้งค่าสวน',`<input type="hidden" name="_c" value="setup"><div class="fld"><label class="l" for="o1">ชื่อสวน</label><input class="f" id="o1" name="name" value="${esc(s.name)}"></div>
@@ -1753,24 +1848,25 @@ sheet.addEventListener('submit',async e=>{
   const c=g('_c'),id=g('_id')||uid();const prev=(S.data[c]||{})[id]||{};
   const btn=f.querySelector('[type=submit]');btn.disabled=true;btn.textContent='กำลังบันทึก…';
   let ok=false,msg='บันทึกแล้ว';
-  if(c==='works'){ok=await put('works',id,{...prev,date:g('date')||today(),type:g('type'),product:g('product'),rate:g('rate'),trees:pickedIds(),cost:+g('cost')||0,uses:(()=>{try{return JSON.parse(g('uses')||'[]')}catch(_){return []}})(),phi:+g('phi')||0,every:+g('every')||0,useQty:+g('useQty')||0,note:g('note')})}
+  if(c==='works'){ok=await put('works',id,{...prev,date:g('date')||today(),type:g('type'),product:g('product'),rate:g('rate'),trees:pickedIds(),cost:+g('cost')||0,uses:(()=>{try{return JSON.parse(g('uses')||'[]')}catch(_){return []}})(),phi:+g('phi')||0,every:+g('every')||0,useQty:+g('useQty')||0,note:g('note'),...billFields(f,g,'works',prev)})}
   else if(c==='flowers'){const ids=pickedIds();if(!ids.length){toast('เลือกต้นอย่างน้อย 1 ต้น');btn.disabled=false;btn.textContent='บันทึก';return}
     const stage=g('stage');ok=await put('flowers',id,{...prev,date:g('date')||today(),stage,fruits:stage==='fruit'?(+g('fruits')||null):null,yieldN:stage==='cut'?(+g('yieldN')||null):null,yieldKg:stage==='cut'?(+g('yieldKg')||null):null,trees:ids,note:g('note')})}
   else if(c==='sales'){const lines=readLines();if(!lines.some(l=>l.kg)){toast('ใส่น้ำหนักอย่างน้อย 1 แถว');btn.disabled=false;btn.textContent='บันทึก';return}
-    ok=await put('sales',id,{...prev,crop:g('crop')||'ทุเรียน',date:g('date')||today(),mode:g('mode'),buyer:g('buyer'),channel:g('channel'),lines,fee:+g('fee')||0,note:g('note')})}
+    ok=await put('sales',id,{...prev,crop:g('crop')||'ทุเรียน',date:g('date')||today(),mode:g('mode'),buyer:g('buyer'),channel:g('channel'),lines,fee:+g('fee')||0,note:g('note'),...billFields(f,g,'sales',prev)})}
   else if(c==='money'){const a=+g('amount');if(!(a>0)){toast('ใส่จำนวนเงิน');btn.disabled=false;btn.textContent='บันทึก';return}
-    ok=await put('money',id,{...prev,date:g('date')||today(),dir:g('dir'),cat:g('cat'),amount:a,note:g('note'),crop:g('crop')||(g('cat')==='ขายมังคุด'?'มังคุด':'ทั้งสวน')})}
+    ok=await put('money',id,{...prev,date:g('date')||today(),dir:g('dir'),cat:g('cat'),amount:a,note:g('note'),crop:g('crop')||(g('cat')==='ขายมังคุด'?'มังคุด':'ทั้งสวน'),...billFields(f,g,'money',prev)})}
   else if(c==='chems'){if(!g('name')){toast('ใส่ชื่อสาร');btn.disabled=false;btn.textContent='บันทึก';return}
     ok=await put('chems',id,{...prev,name:g('name'),form:g('form')||'OTHER',tags:fd_.getAll('tag'),notMix:fd_.getAll('nm'),rate:+g('rate')||null,rateUnit:g('rateUnit'),phi:+g('phi')||0,packSize:+g('packSize')||null,packUnit:g('packUnit'),packPrice:+g('packPrice')||null,npk:g('npk'),ai:+g('ai')||null,aiName:g('aiName'),note:g('note')});
     if(ok&&ui.chemToMix){ui.mix.items=(ui.mix.items||[]).filter(r=>r.pid);ui.mix.items.push({pid:id,amt:+g('rate')||'',unit:g('rateUnit')||'ซีซี'});saveMix()}ui.chemToMix=false;if(ok){const bb=bannedOf(g('name')+' '+g('aiName'));if(bb&&bb.lv==='bad')setTimeout(()=>toast('คำเตือน: '+bb.name+' '+bb.why),1600)}}
   else if(c==='stock'){const q=+g('qty');if(!g('item')||!(q>0)){toast('ใส่ชื่อของและจำนวน');btn.disabled=false;btn.textContent='บันทึก';return}
-    ok=await put('stock',id,{...prev,date:g('date')||today(),item:g('item'),qty:q,unit:g('unit'),kind:g('kind'),cost:+g('cost')||0,note:g('note')})}
+    ok=await put('stock',id,{...prev,date:g('date')||today(),item:g('item'),qty:q,unit:g('unit'),kind:g('kind'),cost:+g('cost')||0,note:g('note'),...billFields(f,g,'stock',prev)})}
   else if(c==='trees'){if(!g('no')){toast('ใส่เบอร์ต้น');btn.disabled=false;btn.textContent='บันทึก';return}
     ok=await put('trees',id,{...prev,no:g('no'),row:g('row'),variety:g('variety'),kind:g('kind'),planted:g('planted'),note:g('note')})}
   else if(c==='trees-bulk'){const st=parseInt(g('start'))||1,n=Math.min(500,parseInt(g('count'))||1);const exist=new Set(trees().map(t=>String(t.no)));let made=0;
     for(let i=0;i<n;i++){const no=g('prefix')+String(st+i);if(exist.has(no))continue;const r=await put('trees',uid(),{no,row:g('row'),variety:g('variety'),kind:g('kind'),planted:g('planted'),created:Date.now()});if(!r)break;made++}
     ok=made>0||n===0;msg=made?`เพิ่ม ${made} ต้นแล้ว`:'เบอร์ซ้ำกับต้นที่มีอยู่';if(!made){toast(msg);btn.disabled=false;btn.textContent='เพิ่มต้น';return}}
   else if(c==='setup'){const days={};VARIETIES.forEach(v=>{const n=+g('d:'+v);if(n)days[v]=n});ok=await put('meta','settings',{name:g('name')||'สวนทุเรียน',days})}
+  if(ok&&BILL&&BILL.c===c&&BILL.pend.length)await flushBills(c,id);
   if(ok){closeSheet();toast(msg);S.writeProven=true}else{btn.disabled=false;btn.textContent='บันทึก'}
 });
 
@@ -1787,6 +1883,7 @@ document.addEventListener('click',async e=>{
   if(a==='backup'){const out={app:'durian-book',version:1,exported:new Date().toISOString(),data:{}};COLLS.forEach(c=>out.data[c]=S.data[c]);
     const blob=new Blob([JSON.stringify(out,null,1)],{type:'application/json'});const u=URL.createObjectURL(blob);const aa=document.createElement('a');aa.href=u;aa.download='สมุดสวน-สำรอง-'+today()+'.json';document.body.appendChild(aa);aa.click();aa.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);toast('ดาวน์โหลดไฟล์สำรองแล้ว');return}
   if(a==='close')return closeSheet();
+  if(await billAct(a,el))return;
   if(a==='new'){let k=el.dataset.kind,x={};
     if(k==='lab'){closeSheet();location.hash='lab';return}
     if(k==='chems'&&el.dataset.tomix)ui.chemToMix=true;
@@ -1849,6 +1946,7 @@ document.addEventListener('change',async e=>{const tg=e.target;
     for(const c of COLLS){for(const [id,x] of Object.entries(d[c]||{})){if(x&&typeof x==='object'){const {updated,...rest}=x;if(await put(c,id,rest))n++}}}
     closeSheet();toast(`นำเข้า ${n} รายการแล้ว`)}catch(_){toast('อ่านไฟล์นี้ไม่ได้')}return}
   if(tg.matches('[data-act=year]')){ui.year=tg.value;render();return}
+  if(tg.matches('[data-bill]')&&tg.files&&tg.files.length){const fs=[...tg.files];tg.value='';addBills(fs);return}
   if(tg.matches('[data-photo]')&&tg.files&&tg.files[0]){const f=tg.files[0];tg.value='';addPhoto(tg.dataset.photo,f);return}
   if(tg.matches('[data-mapfile]')&&tg.files&&tg.files[0]){const f=tg.files[0];tg.value='';toast('กำลังย่อรูป…');try{const img=await compress(f,1600,240000);if(await put('meta','mapimg',{img}))toast('เปลี่ยนรูปผังแล้ว')}catch(_){toast('เปิดรูปนี้ไม่ได้')}}});
 document.addEventListener('input',e=>{const tg=e.target;
